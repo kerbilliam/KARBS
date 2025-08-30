@@ -1,27 +1,16 @@
 #!/bin/sh
 
-# Luke's Auto Rice Bootstrapping Script (LARBS)
-# by Luke Smith <luke@lukesmith.xyz>
+# Kerb's Auto Rice Bootstrapping Script (KARBS)
+# A fork of Luke Smith's LARBS at https://github.com/LukeSmithxyz/LARBS
 # License: GNU GPLv3
 
 ### OPTIONS AND VARIABLES ###
 
-dotfilesrepo="https://github.com/lukesmithxyz/voidrice.git"
-progsfile="https://raw.githubusercontent.com/LukeSmithxyz/LARBS/master/static/progs.csv"
+dotfilesrepo="https://github.com/kerbilliam/konfig.git"
+progsfile="https://raw.githubusercontent.com/kerbilliam/KARBS/master/static/progs.csv"
 aurhelper="yay"
 repobranch="master"
 export TERM=ansi
-
-rssurls="https://lukesmith.xyz/rss.xml
-https://videos.lukesmith.xyz/feeds/videos.xml?videoChannelId=2 \"~Luke Smith (Videos)\"
-https://www.youtube.com/feeds/videos.xml?channel_id=UC2eYFnH61tmytImy1mTYvhA \"~Luke Smith (YouTube)\"
-https://lindypress.net/rss
-https://notrelated.xyz/rss
-https://landchad.net/rss.xml
-https://based.cooking/index.xml
-https://artixlinux.org/feed.php \"tech\"
-https://www.archlinux.org/feeds/news/ \"tech\"
-https://github.com/LukeSmithxyz/voidrice/commits/master.atom \"~LARBS dotfiles\""
 
 ### FUNCTIONS ###
 
@@ -37,11 +26,76 @@ error() {
 
 welcomemsg() {
 	whiptail --title "Welcome!" \
-		--msgbox "Welcome to Luke's Auto-Rice Bootstrapping Script!\\n\\nThis script will automatically install a fully-featured Linux desktop, which I use as my main machine.\\n\\n-Luke" 10 60
+		--msgbox "Welcome to Kerb's Auto-Rice Bootstrapping Script!\\n\\nThis script will automatically install a fully-featured Linux desktop, which I use as my main machine.\\n\\n-William" 10 60
 
 	whiptail --title "Important Note!" --yes-button "All ready!" \
 		--no-button "Return..." \
 		--yesno "Be sure the computer you are using has current pacman updates and refreshed Arch keyrings.\\n\\nIf it does not, the installation of some programs might fail." 8 70
+}
+
+getinitsystem() {
+
+}
+
+optimizemirrors() {
+    grep Reflector /etc/pacman.d/mirrorlist >/dev/null 2>&1 ||
+	whiptail --title "Unoptimized Mirror List" \ 
+	--no-button "No (continue?)" \
+	--yesno "KARBS could not detect if your mirrorlist was optimized by reflector. Package download times may be signficantly longer if the pacman mirrorlist is not optimized for your geolocation.\n\nDo you want KARBS to install and run reflector to optimize your pacman mirrorlist?\n\nCommand to be run:\ncp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak\nreflector --sort rate -p https -l 10 --save /etc/pacman.d/mirrorlist" 17 90 &&
+	whiptail --title "Optimizing Pacman Mirrorlist" \
+	--infobox "This should only take a couple minutes.\n\nI recommend running reflector manually with better filters after installation." 15 90 &&
+	installpkg reflector &&
+	cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak &&
+	reflector --sort rate -p https -l 10 --save /etc/pacman.d/mirrorlist ||
+	whiptail --title "Continue KARBS?" \
+	--yesno "You selected 'no' on the previous page or there was an error when running reflector.\nDo you still want to continue with KARBS?" 10 90 ||
+	error "Error optimizing pacman mirrors."
+}
+
+simpleinstall() {
+    whiptail --title "Package Install" \
+	--infobox "Installing $1"
+    installpkg "$1"
+}
+
+installnvdrivers() {
+    kernels=$(pacman -Q linux linux-lts linux-zen linux-hardened linux-rt linux-rt-lts 2>/dev/null | cut -f 1 -d " " | paste -s -d " " )
+    devices=$(echo "$1" | cut -f 1 | sed '/^$/d')
+    driver=$(whiptail --menu "Install drivers for the following device(s):\n$devices\n\nCurrently installed kernels: $kernels\n\nPlease select a driver to install." 30 90 7 \
+    "nvidia-open" "recommended for Turing+ on linux" \
+    "nvidia-open-lts" "recommended for Turing+ on linux-lts" \
+    "nvidia-open-dkms" "recommended for Ampere+ on any kernel(s)" \
+    "nvidia" "recommended for Maxwell - Lovelace on linux" \
+    "nvidia-lts" "recommended for Maxwell - Lovelace on linux-lts" \
+    "nvidia-dkms" "recommended for Maxwell - Lovelace on any kernel(s)" \
+    "nvm" "Nevermind" \
+    3>&1 1>&2 2>&3)
+    # ^^^^^^^^^^^^^ Some bs to make it work...
+
+    case $driver in
+	"nvidia-open") simpleinstall nvidia-open ;;
+	"nvidia-open-lts") simpleinstall nvidia-open-lts ;;
+	"nvidia-open-dkms") simpleinstall nvidia-open-dkms ;;
+	"nvidia") simpleinstall nvidia ;;
+	"nvidia-lts") simpleinstall nvidia-lts ;;
+	"nvidia-dkms") simpleinstall nvidia-dkms ;;
+	"nvm") return 1 ;;
+    esac
+}
+
+handlenvidia() {
+    # NVIDIA vendor ID is 10de
+    # VGA/3D Device IDs start with 03
+    cards=$(lspci -k -d 10de::03xx)
+    if [ -n "$cards" ]; then
+	whiptail --title "NVIDIA Card Detected" --yes-button "Yes (select options)" --no-button "No (continue?)" \
+	    --yesno "$cards\n\nDo you want KARBS to install NVIDIA drivers?" 10 90 &&
+	    installnvdrivers "$cards" &&
+	    whip||
+	    whiptail --title "Continue KARBS Installation?" \
+	    --yesno "NVIDIA driver installation aborted.\n\nResume KARBS installation?" ||
+	    return 1
+    fi
 }
 
 getuserandpass() {
