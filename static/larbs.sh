@@ -8,9 +8,14 @@
 
 dotfilesrepo="https://github.com/kerbilliam/konfig.git"
 progsfile="https://raw.githubusercontent.com/kerbilliam/KARBS/master/static/progs.csv"
+hooksdir="https://raw.githubusercontent.com/kerbilliam/KARBS/master/hooks"
 aurhelper="yay"
 repobranch="master"
 export TERM=ansi
+
+ntp="no"
+reflector="no"
+installnvidia="no"
 
 ### FUNCTIONS ###
 
@@ -33,54 +38,57 @@ welcomemsg() {
 		--yesno "Be sure the computer you are using has current pacman updates and refreshed Arch keyrings.\\n\\nIf it does not, the installation of some programs might fail." 8 70
 }
 
-getinitsystem() {
+isSystemd() {
+    case $(realpath /sbin/init) in
+	*systemd*) return 0 ;;
+	*) return 1 ;;
+    esac
+}
 
+activateNTP() {
+    timedatectl status | grep -qF 'NTP service: active' && return 0 || return 1
+}
+
+handleNoSysdNTP() {
+    whiptail --title "Not Running Systemd" \
+	--no-button "No (Exit KARBS)" \
+	--yesno "KARBS cannot detect if you have an NTP service running. KARBS can only setup systemd-timesyncd as an SNTP service. It is highly recommended to setup a NTP/SNTP service before resuming KARBS.\n\nResume KARBS anyway?" 15 90
+}
+
+handleNTP() {
+    whiptail --title 'Setup NTP Service' \
+	--yesno "KARBS could not detect an NTP service running. A NTP (Network Time Protocol) service connects to a specific server to sync your system clock. This helps with downloading packages from the internet.\n\nDo you want KARBS to setup systemd-timesyncd as your system's NTP/SNTP service? If you are sure you have one enabled, select 'No'." 15 90
 }
 
 optimizemirrors() {
     grep Reflector /etc/pacman.d/mirrorlist >/dev/null 2>&1 ||
 	whiptail --title "Unoptimized Mirror List" \ 
-	--no-button "No (continue?)" \
-	--yesno "KARBS could not detect if your mirrorlist was optimized by reflector. Package download times may be signficantly longer if the pacman mirrorlist is not optimized for your geolocation.\n\nDo you want KARBS to install and run reflector to optimize your pacman mirrorlist?\n\nCommand to be run:\ncp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak\nreflector --sort rate -p https -l 10 --save /etc/pacman.d/mirrorlist" 17 90 &&
-	whiptail --title "Optimizing Pacman Mirrorlist" \
-	--infobox "This should only take a couple minutes.\n\nI recommend running reflector manually with better filters after installation." 15 90 &&
-	installpkg reflector &&
-	cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak &&
-	reflector --sort rate -p https -l 10 --save /etc/pacman.d/mirrorlist ||
-	whiptail --title "Continue KARBS?" \
-	--yesno "You selected 'no' on the previous page or there was an error when running reflector.\nDo you still want to continue with KARBS?" 10 90 ||
-	error "Error optimizing pacman mirrors."
+	--yesno "KARBS could not detect if your mirrorlist was optimized by reflector. Package download times may be signficantly longer if the pacman mirrorlist is not optimized for your geolocation.\n\nDo you want KARBS to install and run reflector to optimize your pacman mirrorlist?\n\nCommand to be run:\ncp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak\nreflector --sort rate -p https -l 10 --save /etc/pacman.d/mirrorlist\n\nIf you select yes, I recommend running reflector again later with stricter filters." 17 90
 }
 
-simpleinstall() {
-    whiptail --title "Package Install" \
-	--infobox "Installing $1"
-    installpkg "$1"
-}
-
-installnvdrivers() {
+choosenvidiadriver() {
     kernels=$(pacman -Q linux linux-lts linux-zen linux-hardened linux-rt linux-rt-lts 2>/dev/null | cut -f 1 -d " " | paste -s -d " " )
     devices=$(echo "$1" | cut -f 1 | sed '/^$/d')
-    driver=$(whiptail --menu "Install drivers for the following device(s):\n$devices\n\nCurrently installed kernels: $kernels\n\nPlease select a driver to install." 30 90 7 \
+    installnvidia=$(whiptail --menu "Install drivers for the following device(s):\n$devices\n\nCurrently installed kernels: $kernels\n\nPlease select a driver to install." 30 90 7 \
     "nvidia-open" "recommended for Turing+ on linux" \
     "nvidia-open-lts" "recommended for Turing+ on linux-lts" \
     "nvidia-open-dkms" "recommended for Ampere+ on any kernel(s)" \
     "nvidia" "recommended for Maxwell - Lovelace on linux" \
     "nvidia-lts" "recommended for Maxwell - Lovelace on linux-lts" \
     "nvidia-dkms" "recommended for Maxwell - Lovelace on any kernel(s)" \
-    "nvm" "Nevermind" \
+    "no" "Nevermind" \
     3>&1 1>&2 2>&3)
     # ^^^^^^^^^^^^^ Some bs to make it work...
 
-    case $driver in
-	"nvidia-open") simpleinstall nvidia-open ;;
-	"nvidia-open-lts") simpleinstall nvidia-open-lts ;;
-	"nvidia-open-dkms") simpleinstall nvidia-open-dkms ;;
-	"nvidia") simpleinstall nvidia ;;
-	"nvidia-lts") simpleinstall nvidia-lts ;;
-	"nvidia-dkms") simpleinstall nvidia-dkms ;;
-	"nvm") return 1 ;;
-    esac
+    #case $driver in
+    #    "nvidia-open") installnvidia="nvidia-open" ;;
+    #    "nvidia-open-lts") installnvidia="nvidia-open-lts" ;;
+    #    "nvidia-open-dkms") installnvidia="nvidia-open-dkms" ;;
+    #    "nvidia") installnvidia="nvidia" ;;
+    #    "nvidia-lts") installnvidia="nvidia-lts" ;;
+    #    "nvidia-dkms") installnvidia="nvidia-dkms" ;;
+    #    "no") return 0 ;;
+    #esac
 }
 
 handlenvidia() {
@@ -90,12 +98,22 @@ handlenvidia() {
     if [ -n "$cards" ]; then
 	whiptail --title "NVIDIA Card Detected" --yes-button "Yes (select options)" --no-button "No (continue?)" \
 	    --yesno "$cards\n\nDo you want KARBS to install NVIDIA drivers?" 10 90 &&
-	    installnvdrivers "$cards" &&
-	    whip||
-	    whiptail --title "Continue KARBS Installation?" \
-	    --yesno "NVIDIA driver installation aborted.\n\nResume KARBS installation?" ||
-	    return 1
+	    return 0
     fi
+}
+
+installnvidiadriver() {
+    whiptail --title "Installing NVIDIA Driver" \
+	--infobox "Installing the $1 driver." 7 50
+    installpkg $1
+}
+
+installpaccache() {
+    whiptail --title "Installing paccache" \
+	--infobox "Installing paccache and creating pacman hook."
+    installpkg pacman-contrib
+    curl -Lo "$hooksdir/paccache.hook" /etc/pacman.d/hooks/paccache.hook
+    curl -Lo "$hooksdir/paccache-uninstall.hook" /etc/pacman.d/hooks/paccache-uninstall.hook
 }
 
 getuserandpass() {
@@ -128,6 +146,14 @@ preinstallmsg() {
 		exit 1
 	}
 }
+
+installoptdeps() {
+    [ "$ntp" != "no" ] && setntp
+    [ "$reflector" != "no" ] && runreflector
+    [ "$installnvidia" != "no" ] && installnvidiadriver "$installnvidia"
+    [ "$paccache" != "no" ] && enablepaccache "$paccache"
+}
+
 
 adduserandpass() {
 	# Adds user `$name` with password $pass1.
@@ -282,6 +308,22 @@ pacman --noconfirm --needed -Sy libnewt ||
 # Welcome user and pick dotfiles.
 welcomemsg || error "User exited."
 
+# Check if NTP service is running.
+if isSystemd; then
+    handleNTP && ntp="yes"
+else
+    handleNoSysdNTP || error "User exited."
+fi
+
+# Check if reflector was run.
+optimizemirrors && reflector="yes"
+
+# Handle NVIDIA drivers.
+handlenvidia && choosenvidiadriver "$cards"
+
+# Let user choose to use paccache
+choicepaccache && paccache="yes"
+
 # Get and verify username and password.
 getuserandpass || error "User exited."
 
@@ -297,8 +339,17 @@ preinstallmsg || error "User exited."
 refreshkeys ||
 	error "Error automatically refreshing Arch keyring. Consider doing so manually."
 
-for x in curl ca-certificates base-devel git ntp zsh dash; do
-	whiptail --title "LARBS Installation" \
+# Make pacman colorful and use concurrent downloads.
+sed -Ei "s/^#(ParallelDownloads).*/\1 = 5/;/^#Color$/s/#//" /etc/pacman.conf
+
+# Use all cores for compilation.
+sed -i "s/-j2/-j$(nproc)/;/^#MAKEFLAGS/s/^#//" /etc/makepkg.conf
+
+# Enable SNTP service, run reflector, and install NVIDIA drivers based on the user's choice.
+installoptdeps
+
+for x in curl ca-certificates base-devel git zsh dash; do
+	whiptail --title "KARBS Installation" \
 		--infobox "Installing \`$x\` which is required to install and configure other programs." 8 70
 	installpkg "$x"
 done
@@ -317,12 +368,6 @@ trap 'rm -f /etc/sudoers.d/larbs-temp' HUP INT QUIT TERM PWR EXIT
 echo "%wheel ALL=(ALL) NOPASSWD: ALL
 Defaults:%wheel,root runcwd=*" >/etc/sudoers.d/larbs-temp
 
-# Make pacman colorful, concurrent downloads and Pacman eye-candy.
-grep -q "ILoveCandy" /etc/pacman.conf || sed -i "/#VerbosePkgLists/a ILoveCandy" /etc/pacman.conf
-sed -Ei "s/^#(ParallelDownloads).*/\1 = 5/;/^#Color$/s/#//" /etc/pacman.conf
-
-# Use all cores for compilation.
-sed -i "s/-j2/-j$(nproc)/;/^#MAKEFLAGS/s/^#//" /etc/makepkg.conf
 
 manualinstall $aurhelper || error "Failed to install AUR helper."
 
