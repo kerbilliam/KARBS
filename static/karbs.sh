@@ -9,12 +9,15 @@
 dotfilesrepo="https://github.com/kerbilliam/konfig.git"
 progsfile="https://raw.githubusercontent.com/kerbilliam/KARBS/master/static/progs.csv"
 hooksdir="https://raw.githubusercontent.com/kerbilliam/KARBS/master/hooks"
+interceptiondir="https://raw.githubusercontent.com/kerbilliam/KARBS/master/interception"
 aurhelper="yay"
 repobranch="master"
 export TERM=ansi
 
+nmanager="no"
 ntp="no"
-reflector="no"
+rflector="no"
+pcache="no"
 installnvidia="no"
 
 ### FUNCTIONS ###
@@ -45,8 +48,8 @@ isSystemd() {
     esac
 }
 
-activateNTP() {
-    timedatectl status | grep -qF 'NTP service: active' && return 0 || return 1
+checkntp() {
+    timedatectl status | grep -qF 'NTP service: active'
 }
 
 handleNoSysdNTP() {
@@ -55,15 +58,28 @@ handleNoSysdNTP() {
 	--yesno "KARBS cannot detect if you have an NTP service running. KARBS can only setup systemd-timesyncd as an SNTP service. It is highly recommended to setup a NTP/SNTP service before resuming KARBS.\n\nResume KARBS anyway?" 15 90
 }
 
-handleNTP() {
+choicentp() {
     whiptail --title 'Setup NTP Service' \
 	--yesno "KARBS could not detect an NTP service running. A NTP (Network Time Protocol) service connects to a specific server to sync your system clock. This helps with downloading packages from the internet.\n\nDo you want KARBS to setup systemd-timesyncd as your system's NTP/SNTP service? If you are sure you have one enabled, select 'No'." 15 90
 }
 
-optimizemirrors() {
+choiceNM() {
+    systemctl --quiet is-active NetworkManager.service ||
+	whiptail --title "Enable Network Manager" \
+	--yesno "You do not have NetworkManager.service enabled. Do you want KARBS to enable it?"
+}
+
+choicereflector() {
     grep Reflector /etc/pacman.d/mirrorlist >/dev/null 2>&1 ||
-	whiptail --title "Unoptimized Mirror List" \ 
+	whiptail --title "Unoptimized Mirror List" \
 	--yesno "KARBS could not detect if your mirrorlist was optimized by reflector. Package download times may be signficantly longer if the pacman mirrorlist is not optimized for your geolocation.\n\nDo you want KARBS to install and run reflector to optimize your pacman mirrorlist?\n\nCommand to be run:\ncp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak\nreflector --sort rate -p https -l 10 --save /etc/pacman.d/mirrorlist\n\nIf you select yes, I recommend running reflector again later with stricter filters." 17 90
+}
+
+runreflector() {
+    whiptail --title "Optimizing Pacman Mirrorlist" --infobox "Running reflector. This should only take a couple of minutes." 10 90
+    installpkg reflector
+    cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak
+    reflector --sort rate -p https -l 10 --save /etc/pacman.d/mirrorlist
 }
 
 choosenvidiadriver() {
@@ -105,7 +121,12 @@ handlenvidia() {
 installnvidiadriver() {
     whiptail --title "Installing NVIDIA Driver" \
 	--infobox "Installing the $1 driver." 7 50
-    installpkg $1
+    installpkg "$1"
+}
+
+choicepaccache() {
+    whiptail --title "Install paccache?" \
+	--yesno "Do you want KARBS to setup paccache to manage the size of your package cache?" 10 90
 }
 
 installpaccache() {
@@ -135,24 +156,23 @@ usercheck() {
 	! { id -u "$name" >/dev/null 2>&1; } ||
 		whiptail --title "WARNING" --yes-button "CONTINUE" \
 			--no-button "No wait..." \
-			--yesno "The user \`$name\` already exists on this system. LARBS can install for a user already existing, but it will OVERWRITE any conflicting settings/dotfiles on the user account.\\n\\nLARBS will NOT overwrite your user files, documents, videos, etc., so don't worry about that, but only click <CONTINUE> if you don't mind your settings being overwritten.\\n\\nNote also that LARBS will change $name's password to the one you just gave." 14 70
+			--yesno "The user \`$name\` already exists on this system. KARBS can install for a user already existing, but it will OVERWRITE any conflicting settings/dotfiles on the user account.\\n\\nKARBS will NOT overwrite your user files, documents, videos, etc., so don't worry about that, but only click <CONTINUE> if you don't mind your settings being overwritten.\\n\\nNote also that KARBS will change $name's password to the one you just gave." 14 70
 }
 
 preinstallmsg() {
 	whiptail --title "Let's get this party started!" --yes-button "Let's go!" \
 		--no-button "No, nevermind!" \
-		--yesno "The rest of the installation will now be totally automated, so you can sit back and relax.\\n\\nIt will take some time, but when done, you can relax even more with your complete system.\\n\\nNow just press <Let's go!> and the system will begin installation!" 13 60 || {
+		--yesno "The rest of the installation will now be totally automated, so you can sit back and relax.\\n\\nIt will take some time, but when done, you can relax even more with your complete system.\\n\\nNow just press <Let's go!> and the system will begin installation!\n\nSelected Options:\n\nnetworkmanager:    $nmanager\ntimesyncd:    $ntp\n	reflector:    $rflector\npaccache:    $pcache\nnvidia driver:    $installnvidia" 15 90 || {
 		clear
 		exit 1
 	}
 }
 
-installoptdeps() {
-    [ "$ntp" != "no" ] && setntp
-    [ "$reflector" != "no" ] && runreflector
-    [ "$installnvidia" != "no" ] && installnvidiadriver "$installnvidia"
-    [ "$paccache" != "no" ] && enablepaccache "$paccache"
+enableNM() {
+    installpkg networkmanager &&
+	systemctl --quiet enable NetworkManager.service
 }
+
 
 
 adduserandpass() {
@@ -205,7 +225,7 @@ manualinstall() {
 
 maininstall() {
 	# Installs all needed programs from main repo.
-	whiptail --title "LARBS Installation" --infobox "Installing \`$1\` ($n of $total). $1 $2" 9 70
+	whiptail --title "KARBS Installation" --infobox "Installing \`$1\` ($n of $total). $1 $2" 9 70
 	installpkg "$1"
 }
 
@@ -213,7 +233,7 @@ gitmakeinstall() {
 	progname="${1##*/}"
 	progname="${progname%.git}"
 	dir="$repodir/$progname"
-	whiptail --title "LARBS Installation" \
+	whiptail --title "KARBS Installation" \
 		--infobox "Installing \`$progname\` ($n of $total) via \`git\` and \`make\`. $(basename "$1") $2" 8 70
 	sudo -u "$name" git -C "$repodir" clone --depth 1 --single-branch \
 		--no-tags -q "$1" "$dir" ||
@@ -228,14 +248,14 @@ gitmakeinstall() {
 }
 
 aurinstall() {
-	whiptail --title "LARBS Installation" \
+	whiptail --title "KARBS Installation" \
 		--infobox "Installing \`$1\` ($n of $total) from the AUR. $1 $2" 9 70
 	echo "$aurinstalled" | grep -q "^$1$" && return 1
 	sudo -u "$name" $aurhelper -S --noconfirm "$1" >/dev/null 2>&1
 }
 
 pipinstall() {
-	whiptail --title "LARBS Installation" \
+	whiptail --title "KARBS Installation" \
 		--infobox "Installing the Python package \`$1\` ($n of $total). $1 $2" 9 70
 	[ -x "$(command -v "pip")" ] || installpkg python-pip >/dev/null 2>&1
 	yes | pip install "$1"
@@ -272,26 +292,6 @@ putgitrepo() {
 	sudo -u "$name" cp -rfT "$dir" "$2"
 }
 
-vimplugininstall() {
-	# Installs vim plugins.
-	whiptail --infobox "Installing neovim plugins..." 7 60
-	mkdir -p "/home/$name/.config/nvim/autoload"
-	curl -Ls "https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim" >  "/home/$name/.config/nvim/autoload/plug.vim"
-	chown -R "$name:wheel" "/home/$name/.config/nvim"
-	sudo -u "$name" nvim -c "PlugInstall|q|q"
-}
-
-makeuserjs(){
-	# Get the Arkenfox user.js and prepare it.
-	arkenfox="$pdir/arkenfox.js"
-	overrides="$pdir/user-overrides.js"
-	userjs="$pdir/user.js"
-	ln -fs "/home/$name/.config/firefox/larbs.js" "$overrides"
-	[ ! -f "$arkenfox" ] && curl -sL "https://raw.githubusercontent.com/arkenfox/user.js/master/user.js" > "$arkenfox"
-	cat "$arkenfox" "$overrides" > "$userjs"
-	chown "$name:wheel" "$arkenfox" "$userjs"
-}
-
 finalize() {
 	whiptail --title "All done!" \
 		--msgbox "Congrats! Provided there were no hidden errors, the script completed successfully and all the programs and configuration files should be in place.\\n\\nTo run the new graphical environment, log out and log back in as your new user, then run the command \"startx\" to start the graphical environment (it will start automatically in tty1).\\n\\n.t Luke" 13 80
@@ -310,19 +310,20 @@ welcomemsg || error "User exited."
 
 # Check if NTP service is running.
 if isSystemd; then
-    handleNTP && ntp="yes"
+    choiceNM && nmanager="yes"
+    checkntp || choicentp && ntp="yes"
 else
     handleNoSysdNTP || error "User exited."
 fi
 
 # Check if reflector was run.
-optimizemirrors && reflector="yes"
+choicereflector && rflector="yes"
 
-# Handle NVIDIA drivers.
+# Handle NVIDIA drivers. Sets installnvidia variable.
 handlenvidia && choosenvidiadriver "$cards"
 
 # Let user choose to use paccache
-choicepaccache && paccache="yes"
+choicepaccache && pcache="yes"
 
 # Get and verify username and password.
 getuserandpass || error "User exited."
@@ -345,8 +346,11 @@ sed -Ei "s/^#(ParallelDownloads).*/\1 = 5/;/^#Color$/s/#//" /etc/pacman.conf
 # Use all cores for compilation.
 sed -i "s/-j2/-j$(nproc)/;/^#MAKEFLAGS/s/^#//" /etc/makepkg.conf
 
-# Enable SNTP service, run reflector, and install NVIDIA drivers based on the user's choice.
-installoptdeps
+# Enable NM and SNTP service, run reflector, and install NVIDIA drivers based on the user's choice.
+[ "$ntp" != "no" ] && systemctl --quiet enable systemd-timesyncd
+[ "$nmanager" != "no" ] && enableNM
+[ "$rflector" != "no" ] && runreflector
+[ "$installnvidia" != "no" ] && installnvidiadriver "$installnvidia"
 
 for x in curl ca-certificates base-devel git zsh dash; do
 	whiptail --title "KARBS Installation" \
@@ -354,20 +358,15 @@ for x in curl ca-certificates base-devel git zsh dash; do
 	installpkg "$x"
 done
 
-whiptail --title "LARBS Installation" \
-	--infobox "Synchronizing system time to ensure successful and secure installation of software..." 8 70
-ntpd -q -g >/dev/null 2>&1
-
 adduserandpass || error "Error adding username and/or password."
 
 [ -f /etc/sudoers.pacnew ] && cp /etc/sudoers.pacnew /etc/sudoers # Just in case
 
 # Allow user to run sudo without password. Since AUR programs must be installed
 # in a fakeroot environment, this is required for all builds with AUR.
-trap 'rm -f /etc/sudoers.d/larbs-temp' HUP INT QUIT TERM PWR EXIT
+trap 'rm -f /etc/sudoers.d/karbs-temp' HUP INT QUIT TERM PWR EXIT
 echo "%wheel ALL=(ALL) NOPASSWD: ALL
-Defaults:%wheel,root runcwd=*" >/etc/sudoers.d/larbs-temp
-
+Defaults:%wheel,root runcwd=*" >/etc/sudoers.d/karbs-temp
 
 manualinstall $aurhelper || error "Failed to install AUR helper."
 
@@ -385,13 +384,6 @@ installationloop
 putgitrepo "$dotfilesrepo" "/home/$name" "$repobranch"
 rm -rf "/home/$name/.git/" "/home/$name/README.md" "/home/$name/LICENSE" "/home/$name/FUNDING.yml"
 
-# Write urls for newsboat if it doesn't already exist
-[ -s "/home/$name/.config/newsboat/urls" ] ||
-	echo "$rssurls" | sudo -u "$name" tee "/home/$name/.config/newsboat/urls" >/dev/null
-
-# Install vim plugins if not alread present.
-[ ! -f "/home/$name/.config/nvim/autoload/plug.vim" ] && vimplugininstall
-
 # Most important command! Get rid of the beep!
 rmmod pcspkr
 echo "blacklist pcspkr" >/etc/modprobe.d/nobeep.conf
@@ -399,57 +391,36 @@ echo "blacklist pcspkr" >/etc/modprobe.d/nobeep.conf
 # Make zsh the default shell for the user.
 chsh -s /bin/zsh "$name" >/dev/null 2>&1
 sudo -u "$name" mkdir -p "/home/$name/.cache/zsh/"
-sudo -u "$name" mkdir -p "/home/$name/.config/abook/"
 sudo -u "$name" mkdir -p "/home/$name/.config/mpd/playlists/"
 
 # Make dash the default #!/bin/sh symlink.
 ln -sfT /bin/dash /bin/sh >/dev/null 2>&1
+echo "[Trigger]
+Type = Package
+Operation = Install
+Operation = Upgrade
+Target = bash
+
+[Action]
+Description = Re-pointing /bin/sh symlink to dash...
+When = PostTransaction
+Exec = /usr/bin/ln" > /etc/pacman.d/hooks/relink-dash.hook
 
 # dbus UUID must be generated for Artix runit.
-dbus-uuidgen >/var/lib/dbus/machine-id
+isSystemd || dbus-uuidgen >/var/lib/dbus/machine-id
 
-# Use system notifications for Brave on Artix
-# Only do it when systemd is not present
-[ "$(readlink -f /sbin/init)" != "/usr/lib/systemd/systemd" ] && echo "export \$(dbus-launch)" >/etc/profile.d/dbus.sh
+# Rebind capslock
+installpkg "interception-tools interception-dual-function-keys"
+mkdir -p /etc/interception/dual-function-keys
+mkdir -p /etc/interception/udevmon.d
+curl -Lo "$interceptiondir/dual-function-keys/mappings.yaml" "/etc/interception/dual-function-keys/mappings.yaml"
+curl -Lo "$interceptiondir/udevmon.d/udevmon.yaml" "/etc/interception/udevmon.d/udevmon.yaml"
 
-# Enable tap to click
-[ ! -f /etc/X11/xorg.conf.d/40-libinput.conf ] && printf 'Section "InputClass"
-        Identifier "libinput touchpad catchall"
-        MatchIsTouchpad "on"
-        MatchDevicePath "/dev/input/event*"
-        Driver "libinput"
-	# Enable left mouse button by tapping
-	Option "Tapping" "on"
-EndSection' >/etc/X11/xorg.conf.d/40-libinput.conf
-
-# All this below to get Librewolf installed with add-ons and non-bad settings.
-
-whiptail --infobox "Setting browser privacy settings and add-ons..." 7 60
-
-browserdir="/home/$name/.librewolf"
-profilesini="$browserdir/profiles.ini"
-
-# Start librewolf headless so it generates a profile. Then get that profile in a variable.
-sudo -u "$name" librewolf --headless >/dev/null 2>&1 &
-sleep 1
-profile="$(sed -n "/Default=.*.default-default/ s/.*=//p" "$profilesini")"
-pdir="$browserdir/$profile"
-
-[ -d "$pdir" ] && makeuserjs
-
-# Kill the now unnecessary librewolf instance.
-pkill -u "$name" librewolf
-
-# Allow wheel users to sudo with password and allow several system commands
-# (like `shutdown` to run without password).
-echo "%wheel ALL=(ALL:ALL) ALL" >/etc/sudoers.d/00-larbs-wheel-can-sudo
-echo "%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/shutdown,/usr/bin/reboot,/usr/bin/systemctl suspend,/usr/bin/wifi-menu,/usr/bin/mount,/usr/bin/umount,/usr/bin/pacman -Syu,/usr/bin/pacman -Syyu,/usr/bin/pacman -Syyu --noconfirm,/usr/bin/loadkeys,/usr/bin/pacman -Syyuw --noconfirm,/usr/bin/pacman -S -y --config /etc/pacman.conf --,/usr/bin/pacman -S -y -u --config /etc/pacman.conf --" >/etc/sudoers.d/01-larbs-cmds-without-password
-echo "Defaults editor=/usr/bin/nvim" >/etc/sudoers.d/02-larbs-visudo-editor
-mkdir -p /etc/sysctl.d
-echo "kernel.dmesg_restrict = 0" > /etc/sysctl.d/dmesg.conf
+# Setup paccache last so hooks don't run for each package.
+[ "$pcache" != "no" ] && installpaccache
 
 # Cleanup
-rm -f /etc/sudoers.d/larbs-temp
+rm -f /etc/sudoers.d/karbs-temp
 
 # Last message! Install complete!
 finalize
