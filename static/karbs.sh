@@ -115,6 +115,8 @@ handlenvidia() {
 	whiptail --title "NVIDIA Card Detected" --yes-button "Yes (select options)" --no-button "No (continue?)" \
 	    --yesno "$cards\n\nDo you want KARBS to install NVIDIA drivers?" 10 90 &&
 	    return 0
+    else
+	return 1
     fi
 }
 
@@ -133,8 +135,8 @@ installpaccache() {
     whiptail --title "Installing paccache" \
 	--infobox "Installing paccache and creating pacman hook."
     installpkg pacman-contrib
-    curl -Lo "$hooksdir/paccache.hook" /etc/pacman.d/hooks/paccache.hook
-    curl -Lo "$hooksdir/paccache-uninstall.hook" /etc/pacman.d/hooks/paccache-uninstall.hook
+    curl -Lo /etc/pacman.d/hooks/paccache.hook "$hooksdir/paccache.hook"
+    curl -Lo /etc/pacman.d/hooks/paccache-uninstall.hook "$hooksdir/paccache-uninstall.hook"
 }
 
 getuserandpass() {
@@ -162,7 +164,7 @@ usercheck() {
 preinstallmsg() {
 	whiptail --title "Let's get this party started!" --yes-button "Let's go!" \
 		--no-button "No, nevermind!" \
-		--yesno "The rest of the installation will now be totally automated, so you can sit back and relax.\\n\\nIt will take some time, but when done, you can relax even more with your complete system.\\n\\nNow just press <Let's go!> and the system will begin installation!\n\nSelected Options:\n\nnetworkmanager:    $nmanager\ntimesyncd:    $ntp\n	reflector:    $rflector\npaccache:    $pcache\nnvidia driver:    $installnvidia" 15 90 || {
+		--yesno "The rest of the installation will now be totally automated, so you can sit back and relax.\\n\\nIt will take some time, but when done, you can relax even more with your complete system.\\n\\nNow just press <Let's go!> and the system will begin installation!\n\nSelected Options:\n\nnetworkmanager:    $nmanager\ntimesyncd:    $ntp\n	reflector:    $rflector\npaccache:    $pcache\nnvidia driver:    $installnvidia" 35 90 || {
 		clear
 		exit 1
 	}
@@ -413,8 +415,8 @@ isSystemd || dbus-uuidgen >/var/lib/dbus/machine-id
 installpkg "interception-tools interception-dual-function-keys"
 mkdir -p /etc/interception/dual-function-keys
 mkdir -p /etc/interception/udevmon.d
-curl -Lo "$interceptiondir/dual-function-keys/mappings.yaml" "/etc/interception/dual-function-keys/mappings.yaml"
-curl -Lo "$interceptiondir/udevmon.d/udevmon.yaml" "/etc/interception/udevmon.d/udevmon.yaml"
+curl -Lo "/etc/interception/dual-function-keys/mappings.yaml" "$interceptiondir/dual-function-keys/mappings.yaml" 
+curl -Lo "/etc/interception/udevmon.d/udevmon.yaml" "$interceptiondir/udevmon.d/udevmon.yaml" 
 systemctl enable udevmon
 
 # Setup paccache last so hooks don't run for each package.
