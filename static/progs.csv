@@ -15,6 +15,7 @@
 ,waybar,"status bar for KARBS."
 ,grim,"is a screenshot utility used by KARBS."
 ,fuzzel,"is an application launcher and dmenu alternative for Wayland."
+,fzf,"is a fuzzyfinder."
 ,arch-wiki-lite,"is an interface and local copy of the Arch Wiki without HTML."
 ,arch-wiki-docs,"local copy of the Arch-wiki as HTML. Use arch-wiki-lite to search through it."
 ,neovim,"a tidier vim with some useful features"
