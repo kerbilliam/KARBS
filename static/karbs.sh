@@ -49,7 +49,7 @@ isSystemd() {
 }
 
 checkntp() {
-    timedatectl status | grep -qF 'NTP service: active'
+    timedatectl status | grep -qF 'NTP service: active' && return 0 || return 1
 }
 
 handleNoSysdNTP() {
@@ -64,7 +64,7 @@ choicentp() {
 }
 
 choiceNM() {
-    systemctl --quiet is-active NetworkManager.service ||
+    systemctl --quiet is-active NetworkManager.service && return 1 ||
 	whiptail --title "Enable Network Manager" \
 	--yesno "You do not have NetworkManager.service enabled. Do you want KARBS to enable it?"
 }
