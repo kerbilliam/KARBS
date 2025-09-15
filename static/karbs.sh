@@ -60,13 +60,17 @@ handleNoSysdNTP() {
 
 choicentp() {
     whiptail --title 'Setup NTP Service' \
-	--yesno "KARBS could not detect an NTP service running. A NTP (Network Time Protocol) service connects to a specific server to sync your system clock. This helps with downloading packages from the internet.\n\nDo you want KARBS to setup systemd-timesyncd as your system's NTP/SNTP service? If you are sure you have one enabled, select 'No'." 15 90
+	--yesno "KARBS could not detect an NTP service running. A NTP (Network Time Protocol) service connects to a specific server to sync your system clock. This helps with downloading packages from the internet.\n\nDo you want KARBS to setup systemd-timesyncd as your system's NTP/SNTP service? If you are sure you have one enabled, select 'No'." 15 90 &&
+	ntp="yes"
 }
 
 choiceNM() {
-    systemctl --quiet is-active NetworkManager.service && return 1 ||
+    if systemctl --quiet is-active NetworkManager.service; then
+	return 1
+    else
 	whiptail --title "Enable Network Manager" \
 	--yesno "You do not have NetworkManager.service enabled. Do you want KARBS to enable it?"
+    fi
 }
 
 choicereflector() {
@@ -164,7 +168,7 @@ usercheck() {
 preinstallmsg() {
 	whiptail --title "Let's get this party started!" --yes-button "Let's go!" \
 		--no-button "No, nevermind!" \
-		--yesno "The rest of the installation will now be totally automated, so you can sit back and relax.\\n\\nIt will take some time, but when done, you can relax even more with your complete system.\\n\\nNow just press <Let's go!> and the system will begin installation!\n\nSelected Options:\n\nnetworkmanager:    $nmanager\ntimesyncd:    $ntp\n	reflector:    $rflector\npaccache:    $pcache\nnvidia driver:    $installnvidia" 35 90 || {
+		--yesno "The rest of the installation will now be totally automated, so you can sit back and relax.\\n\\nIt will take some time, but when done, you can relax even more with your complete system.\\n\\nNow just press <Let's go!> and the system will begin installation!\n\nSelected Options:\n\nnetworkmanager:    $nmanager\ntimesyncd:    $ntp\nreflector:    $rflector\npaccache:    $pcache\nnvidia driver:    $installnvidia" 35 90 || {
 		clear
 		exit 1
 	}
@@ -313,7 +317,7 @@ welcomemsg || error "User exited."
 # Check if NTP service is running.
 if isSystemd; then
     choiceNM && nmanager="yes"
-    checkntp || choicentp && ntp="yes"
+    checkntp || choicentp
 else
     handleNoSysdNTP || error "User exited."
 fi
