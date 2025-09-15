@@ -415,6 +415,7 @@ mkdir -p /etc/interception/dual-function-keys
 mkdir -p /etc/interception/udevmon.d
 curl -Lo "$interceptiondir/dual-function-keys/mappings.yaml" "/etc/interception/dual-function-keys/mappings.yaml"
 curl -Lo "$interceptiondir/udevmon.d/udevmon.yaml" "/etc/interception/udevmon.d/udevmon.yaml"
+systemctl enable udevmon
 
 # Setup paccache last so hooks don't run for each package.
 [ "$pcache" != "no" ] && installpaccache
