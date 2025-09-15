@@ -10,7 +10,7 @@ dotfilesrepo="https://github.com/kerbilliam/konfig.git"
 progsfile="https://raw.githubusercontent.com/kerbilliam/KARBS/master/static/progs.csv"
 hooksdir="https://raw.githubusercontent.com/kerbilliam/KARBS/master/hooks"
 interceptiondir="https://raw.githubusercontent.com/kerbilliam/KARBS/master/interception"
-aurhelper="yay"
+aurhelper="yay-bin"
 repobranch="master"
 export TERM=ansi
 
@@ -401,6 +401,7 @@ sudo -u "$name" mkdir -p "/home/$name/.config/mpd/playlists/"
 
 # Make dash the default #!/bin/sh symlink.
 ln -sfT /bin/dash /bin/sh >/dev/null 2>&1
+mkdir -p /etc/pacman.d/hooks
 echo "[Trigger]
 Type = Package
 Operation = Install
@@ -416,7 +417,8 @@ Exec = /usr/bin/ln" > /etc/pacman.d/hooks/relink-dash.hook
 isSystemd || dbus-uuidgen >/var/lib/dbus/machine-id
 
 # Rebind capslock
-installpkg "interception-tools interception-dual-function-keys"
+installpkg interception-tools
+installpkg interception-dual-function-keys
 mkdir -p /etc/interception/dual-function-keys
 mkdir -p /etc/interception/udevmon.d
 curl -Lo "/etc/interception/dual-function-keys/mappings.yaml" "$interceptiondir/dual-function-keys/mappings.yaml" 
