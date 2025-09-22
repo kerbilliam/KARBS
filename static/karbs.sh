@@ -6,7 +6,7 @@
 
 ### OPTIONS AND VARIABLES ###
 
-dotfilesrepo="https://github.com/kerbilliam/konfig.git"
+dotfiles="https://github.com/kerbilliam/konfig/archive/refs/heads/main.tar.gz"
 progsfile="https://raw.githubusercontent.com/kerbilliam/KARBS/master/static/progs.csv"
 hooksdir="https://raw.githubusercontent.com/kerbilliam/KARBS/master/hooks"
 interceptiondir="https://raw.githubusercontent.com/kerbilliam/KARBS/master/interception"
@@ -184,8 +184,7 @@ enableNM() {
 adduserandpass() {
 	# Adds user `$name` with password $pass1.
 	whiptail --infobox "Adding user \"$name\"..." 7 50
-	useradd -m -g wheel -s /bin/zsh "$name" >/dev/null 2>&1 ||
-		usermod -a -G wheel "$name" && mkdir -p /home/"$name" && chown "$name":wheel /home/"$name"
+	usermod -a -G wheel "$name" && mkdir -p /home/"$name" && chown "$name":wheel /home/"$name"
 	export repodir="/home/$name/.local/src"
 	mkdir -p "$repodir"
 	chown -R "$name":wheel "$(dirname "$repodir")"
@@ -285,18 +284,6 @@ installationloop() {
 	done </tmp/progs.csv
 }
 
-putgitrepo() {
-	# Downloads a gitrepo $1 and places the files in $2 only overwriting conflicts
-	whiptail --infobox "Downloading and installing config files..." 7 60
-	[ -z "$3" ] && branch="master" || branch="$repobranch"
-	dir=$(mktemp -d)
-	[ ! -d "$2" ] && mkdir -p "$2"
-	chown "$name":wheel "$dir" "$2"
-	sudo -u "$name" git -C "$repodir" clone --depth 1 \
-		--single-branch --no-tags -q --recursive -b "$branch" \
-		--recurse-submodules "$1" "$dir"
-	sudo -u "$name" cp -rfT "$dir" "$2"
-}
 
 finalize() {
 	whiptail --title "All done!" \
@@ -385,14 +372,17 @@ $aurhelper -Y --save --devel
 # and all build dependencies are installed.
 installationloop
 
-# Install the dotfiles in the user's home directory, but remove .git dir and
-# other unnecessary files.
-putgitrepo "$dotfilesrepo" "/home/$name" "$repobranch"
-rm -rf "/home/$name/.git/" "/home/$name/README.md" "/home/$name/LICENSE" "/home/$name/FUNDING.yml"
+# Install the dotfiles in the user's home directory.
+# --strip-components is to remove the wrapper directory.
+# Also remove extra READMEs and the such.
+whiptail --infobox "Downloading and installing config files..." 7 60
+sudo -u "$name" curl -L "$dotfiles" |
+    tar xz --strip-components=1 --overwrite -C /home/"$name"/
+rm -rf "/home/$name/README.md" "/home/$name/LICENSE" "/home/$name/FUNDING.yml"
 
 # Most important command! Get rid of the beep!
-rmmod pcspkr
-echo "blacklist pcspkr" >/etc/modprobe.d/nobeep.conf
+#rmmod pcspkr
+#echo "blacklist pcspkr" >/etc/modprobe.d/nobeep.conf
 
 # Make zsh the default shell for the user.
 chsh -s /bin/zsh "$name" >/dev/null 2>&1
