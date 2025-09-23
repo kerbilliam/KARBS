@@ -39,5 +39,6 @@
 ,ttf-jetbrains-mono-nerd,"is the font for Waybar."
 ,noto-fonts-emoji,"adds emoji support."
 ,openssh,"provides tools to remote into other computers."
+,pacman-contrib,"provides the useful paccache script to manage the package cache."
 A,librewolf-bin,"is the default browser of KARBS which also comes with ad-blocking and other sensible and necessary features by default."
 A,zsh-fast-syntax-highlighting,"provides syntax highlighting in the shell."

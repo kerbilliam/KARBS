@@ -6,24 +6,35 @@
 
 ### OPTIONS AND VARIABLES ###
 
+# Location of dotfiles archive (.tar.gz). Leave empty if not a url.
 dotfiles="https://github.com/kerbilliam/konfig/archive/refs/heads/main.tar.gz"
-progsfile="https://raw.githubusercontent.com/kerbilliam/KARBS/master/static/progs.csv"
-hooksdir="https://raw.githubusercontent.com/kerbilliam/KARBS/master/hooks"
-interceptiondir="https://raw.githubusercontent.com/kerbilliam/KARBS/master/interception"
-aurhelper="yay-bin"
-repobranch="master"
-export TERM=ansi
 
-nmanager="no"
-ntp="no"
-rflector="no"
-pcache="no"
-installnvidia="no"
+# Location of the program list. Can be a url [http(s)] or file on system.
+progsfile="https://raw.githubusercontent.com/kerbilliam/KARBS/master/static/progs.csv"
+
+# Location of the directory for the config files required for remapping capslock.
+# Leave empty if not a url [http(s)].
+interceptiondir="https://raw.githubusercontent.com/kerbilliam/KARBS/master/interception"
+
+# The AUR helper used by KARBS.
+aurhelper="yay-bin"
+
+# Location of the directory for pacman hooks.
+# Leave empty if not a url [http(s)].
+# hooknames are the names of the .hook files in hooksdir.
+hooksdir="https://raw.githubusercontent.com/kerbilliam/KARBS/master/hooks"
+hooknames="paccache.hook paccache-uninstall.hook"
+
+nmanager=""
+sntp=""
+rflector=""
+installnvidia=""
+export TERM=ansi
 
 ### FUNCTIONS ###
 
 installpkg() {
-	pacman --noconfirm --needed -S "$1" >/dev/null 2>&1
+	pacman --noconfirm --needed -S "$@" >/dev/null 2>&1
 }
 
 error() {
@@ -130,17 +141,9 @@ installnvidiadriver() {
     installpkg "$1"
 }
 
-choicepaccache() {
-    whiptail --title "Install paccache?" \
-	--yesno "Do you want KARBS to setup paccache to manage the size of your package cache?" 10 90
-}
-
-installpaccache() {
-    whiptail --title "Installing paccache" \
-	--infobox "Installing paccache and creating pacman hook."
-    installpkg pacman-contrib
-    curl -Lo /etc/pacman.d/hooks/paccache.hook "$hooksdir/paccache.hook"
-    curl -Lo /etc/pacman.d/hooks/paccache-uninstall.hook "$hooksdir/paccache-uninstall.hook"
+installhooks() {
+    whiptail --infobox "Installing Pacman Hooks" 7 50
+    echo "$hooknames" | tr ' ' '\n'
 }
 
 getuserandpass() {
@@ -168,7 +171,7 @@ usercheck() {
 preinstallmsg() {
 	whiptail --title "Let's get this party started!" --yes-button "Let's go!" \
 		--no-button "No, nevermind!" \
-		--yesno "The rest of the installation will now be totally automated, so you can sit back and relax.\\n\\nIt will take some time, but when done, you can relax even more with your complete system.\\n\\nNow just press <Let's go!> and the system will begin installation!\n\nSelected Options:\n\nnetworkmanager:    $nmanager\ntimesyncd:    $ntp\nreflector:    $rflector\npaccache:    $pcache\nnvidia driver:    $installnvidia" 35 90 || {
+		--yesno "The rest of the installation will now be totally automated, so you can sit back and relax.\\n\\nIt will take some time, but when done, you can relax even more with your complete system.\\n\\nNow just press <Let's go!> and the system will begin installation!\n\nSelected Options:\n\nnetworkmanager:    $nmanager\ntimesyncd:    $ntp\nreflector:    $rflector\nnvidia driver:    $installnvidia" 35 90 || {
 		clear
 		exit 1
 	}
@@ -329,6 +332,9 @@ preinstallmsg || error "User exited."
 
 ### The rest of the script requires no user input.
 
+# Create pacman hooks dir
+mkdir -p /etc/pacman.d/hooks
+
 # Refresh Arch keyrings.
 refreshkeys ||
 	error "Error automatically refreshing Arch keyring. Consider doing so manually."
@@ -373,11 +379,15 @@ $aurhelper -Y --save --devel
 installationloop
 
 # Install the dotfiles in the user's home directory.
-# --strip-components is to remove the wrapper directory.
+# --strip-components is to remove the wrapper directory by github.
 # Also remove extra READMEs and the such.
 whiptail --infobox "Downloading and installing config files..." 7 60
-sudo -u "$name" curl -L "$dotfiles" |
-    tar xz --strip-components=1 --overwrite -C /home/"$name"/
+if [ -f "$dotfiles" ]; then
+    tar -xzf "$dotfiles" --overwrite -C /home/"$name"/
+else
+    sudo -u "$name" curl -Ls "$dotfiles" |
+	tar xz --strip-components=1 --overwrite -C /home/"$name"/
+fi
 rm -rf "/home/$name/README.md" "/home/$name/LICENSE" "/home/$name/FUNDING.yml"
 
 # Most important command! Get rid of the beep!
@@ -391,7 +401,6 @@ sudo -u "$name" mkdir -p "/home/$name/.config/mpd/playlists/"
 
 # Make dash the default #!/bin/sh symlink.
 ln -sfT /bin/dash /bin/sh >/dev/null 2>&1
-mkdir -p /etc/pacman.d/hooks
 echo "[Trigger]
 Type = Package
 Operation = Install
@@ -407,16 +416,19 @@ Exec = /usr/bin/ln" > /etc/pacman.d/hooks/relink-dash.hook
 isSystemd || dbus-uuidgen >/var/lib/dbus/machine-id
 
 # Rebind capslock
-installpkg interception-tools
-installpkg interception-dual-function-keys
+installpkg interception-tools interception-dual-function-keys
 mkdir -p /etc/interception/dual-function-keys
 mkdir -p /etc/interception/udevmon.d
-curl -Lo "/etc/interception/dual-function-keys/mappings.yaml" "$interceptiondir/dual-function-keys/mappings.yaml" 
-curl -Lo "/etc/interception/udevmon.d/udevmon.yaml" "$interceptiondir/udevmon.d/udevmon.yaml" 
+curl -Lso "/etc/interception/dual-function-keys/mappings.yaml" "$interceptiondir/dual-function-keys/mappings.yaml" 
+curl -Lso "/etc/interception/udevmon.d/udevmon.yaml" "$interceptiondir/udevmon.d/udevmon.yaml" 
 systemctl enable udevmon
 
-# Setup paccache last so hooks don't run for each package.
-[ "$pcache" != "no" ] && installpaccache
+# Download pacman hooks if specified.
+if [ -n "$hooknames" ]; do 
+    for hook in $(echo "$hooknames" | tr ' ' '\n'); do
+	curl -Lso /etc/pacman.d/hooks/"$hook" "$hooksdir"/"$hook"
+    done
+done
 
 # Cleanup
 rm -f /etc/sudoers.d/karbs-temp
