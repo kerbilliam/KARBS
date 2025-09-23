@@ -7,7 +7,7 @@
 ### OPTIONS AND VARIABLES ###
 
 # Location of dotfiles archive (.tar.gz). Leave empty if not a url.
-dotfiles="https://github.com/kerbilliam/konfig/archive/refs/heads/main.tar.gz"
+dotfiles="https://github.com/kerbilliam/konf/archive/refs/heads/master.tar.gz"
 
 # Location of the program list. Can be a url [http(s)] or file on system.
 progsfile="https://raw.githubusercontent.com/kerbilliam/KARBS/master/static/progs.csv"
